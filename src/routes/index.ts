@@ -1,6 +1,9 @@
 import e from "express";
+import { apiRouter } from "@/routes/api";
 
 const appRouter = e.Router();
+
+appRouter.use("/api", apiRouter);
 
 appRouter.get("/", async (_, res) => {
   try {
