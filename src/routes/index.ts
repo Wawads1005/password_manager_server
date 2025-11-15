@@ -1,5 +1,6 @@
 import e from "express";
 import { apiRouter } from "@/routes/api";
+import { authenticate } from "@/middlewares/auth";
 
 const appRouter = e.Router();
 
@@ -19,6 +20,17 @@ appRouter.get("/", async (_, res) => {
       message: "[ERROR]: Unexpected error occured, please try again later",
     });
   }
+});
+
+appRouter.use("/protected", authenticate, async (req, res) => {
+  const { user } = req;
+
+  if (!user) {
+    res.status(401).json({ message: "Unauthorized" });
+    return;
+  }
+
+  res.status(200).json({ message: "Protected routes" });
 });
 
 export { appRouter };

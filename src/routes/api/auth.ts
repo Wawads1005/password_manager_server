@@ -5,6 +5,7 @@ import { SignJWT } from "jose";
 import { prismaClient } from "@/lib/prisma";
 import { AccountProvider } from "@prisma/client";
 import { keys } from "@/lib/keys";
+import { authenticate } from "@/middlewares/auth";
 
 const authRouter = e.Router();
 
@@ -130,9 +131,8 @@ authRouter.post("/signin", async (req, res) => {
       return;
     }
 
-    const signer = new SignJWT();
+    const signer = new SignJWT({ user: foundUser });
     signer.setProtectedHeader({ alg: "HS256" });
-    signer.setSubject(foundUser.id);
     signer.setExpirationTime("15m");
 
     const textEncoder = new TextEncoder();
@@ -141,6 +141,29 @@ authRouter.post("/signin", async (req, res) => {
     const token = await signer.sign(encodedSecret);
 
     res.status(200).json({ token: token });
+  } catch (error) {
+    if (error instanceof Error) {
+      const { message } = error;
+
+      console.error(`[ERROR]: ${message}`);
+    }
+
+    res.status(500).json({
+      message: "Unexpected error upon creating signing in",
+    });
+  }
+});
+
+authRouter.get("/", authenticate, async (req, res) => {
+  try {
+    const { user } = req;
+
+    if (!user) {
+      res.status(401).json({ message: "Unauthorized" });
+      return;
+    }
+
+    res.status(200).json({ user });
   } catch (error) {
     if (error instanceof Error) {
       const { message } = error;
