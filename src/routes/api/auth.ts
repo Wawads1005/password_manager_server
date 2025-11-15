@@ -1,8 +1,10 @@
 import e from "express";
 import z from "zod";
 import bcrypt from "bcrypt";
+import { SignJWT } from "jose";
 import { prismaClient } from "@/lib/prisma";
 import { AccountProvider } from "@prisma/client";
+import { keys } from "@/lib/keys";
 
 const authRouter = e.Router();
 
@@ -74,6 +76,80 @@ authRouter.post("/signup", async (req, res) => {
 
     res.status(500).json({
       message: "Unexpected error upon creating signing up",
+    });
+  }
+});
+
+const signInInput = z.object({
+  email: z.email(),
+  password: z.string(),
+});
+
+authRouter.post("/signin", async (req, res) => {
+  try {
+    const { body } = req;
+    const parsedSignInInputResult = signInInput.safeParse(body);
+
+    if (!parsedSignInInputResult.success) {
+      res.status(400).json({ message: parsedSignInInputResult.error.message });
+      return;
+    }
+
+    const foundUser = await prismaClient.user.findUnique({
+      where: { email: parsedSignInInputResult.data.email },
+    });
+
+    if (!foundUser) {
+      res.status(404).json({ message: "Email is not yet registered" });
+      return;
+    }
+
+    const foundAccount = await prismaClient.account.findUnique({
+      where: {
+        provider_userId: {
+          provider: AccountProvider.Credentials,
+          userId: foundUser.id,
+        },
+      },
+    });
+
+    if (!foundAccount || !foundAccount.password) {
+      res
+        .status(404)
+        .json({ message: "User does not have credentials account" });
+      return;
+    }
+
+    const matchedPassword = await bcrypt.compare(
+      parsedSignInInputResult.data.password,
+      foundAccount.password
+    );
+
+    if (!matchedPassword) {
+      res.status(401).json({ message: "Wrong credentials" });
+      return;
+    }
+
+    const signer = new SignJWT();
+    signer.setProtectedHeader({ alg: "HS256" });
+    signer.setSubject(foundUser.id);
+    signer.setExpirationTime("15m");
+
+    const textEncoder = new TextEncoder();
+    const encodedSecret = textEncoder.encode(keys.auth.secret);
+
+    const token = await signer.sign(encodedSecret);
+
+    res.status(200).json({ token: token });
+  } catch (error) {
+    if (error instanceof Error) {
+      const { message } = error;
+
+      console.error(`[ERROR]: ${message}`);
+    }
+
+    res.status(500).json({
+      message: "Unexpected error upon creating signing in",
     });
   }
 });
